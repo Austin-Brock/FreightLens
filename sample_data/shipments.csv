@@ -1,0 +1,25 @@
+shipment_id,reference_number,carrier_scac,carrier_name,mode,service_level,origin_city,origin_state,origin_zip,dest_city,dest_state,dest_zip,distance_mi,ship_date,promised_date,delivery_date,weight_lb,billable_weight_lb,pieces,freight_class,declared_value,accessorials,customer,cost_center
+SHP-10001,BOL-10001,ODFL,Old Dominion Freight Line,ltl,standard,Los Angeles,CA,90021,Dallas,TX,75201,,2026-08-03,2026-08-07,2026-08-06,1200,,1,,,LIFTGATE,Northwind Retail,LOG-100
+SHP-10002,BOL-10002,ODFL,Old Dominion Freight Line,ltl,standard,Chicago,IL,60607,Atlanta,GA,30336,,2026-08-04,2026-08-07,2026-08-07,800,,1,,,,Acme Industrial,LOG-100
+SHP-10003,BOL-10003,XPOL,XPO Logistics,ltl,standard,Los Angeles,CA,90021,Dallas,TX,75201,,2026-08-05,2026-08-10,2026-08-10,2500,,1,70,,,Northwind Retail,LOG-200
+SHP-10004,BOL-10004,FDEG,FedEx,parcel,ground,Atlanta,GA,30336,Miami,FL,33142,,2026-08-06,2026-08-10,2026-08-09,12,,1,,,RESIDENTIAL,DTC Orders,ECOM-010
+SHP-10005,BOL-10005,UPSN,UPS,parcel,ground,Chicago,IL,60607,Cleveland,OH,44115,,2026-08-07,2026-08-11,2026-08-11,30,,1,,,OVERSIZE,DTC Orders,ECOM-010
+SHP-10006,BOL-10006,CHRW,C.H. Robinson,ftl,standard,Dallas,TX,75201,Jacksonville,FL,32209,1150,2026-08-10,2026-08-13,2026-08-13,38000,,24,,,DETENTION,Gulf Distributors,LOG-300
+SHP-10007,BOL-10007,RLCA,R+L Carriers,ltl,standard,Cleveland,OH,44115,Pittsburgh,PA,15222,,2026-08-11,2026-08-13,2026-08-13,1500,,1,,,,Acme Industrial,LOG-100
+SHP-10008,BOL-10008,ODFL,Old Dominion Freight Line,ltl,guaranteed,Los Angeles,CA,90021,Seattle,WA,98108,,2026-09-28,2026-10-01,2026-10-03,900,,1,,,,Northwind Retail,LOG-100
+SHP-10009,BOL-10009,FDEG,FedEx,parcel,express,Atlanta,GA,30336,Boston,MA,02128,,2026-09-26,2026-09-28,2026-09-30,8,,1,,,,DTC Orders,ECOM-010
+SHP-10010,BOL-10010,ODFL,Old Dominion Freight Line,ltl,standard,Newark,NJ,07102,Charlotte,NC,28206,,2026-08-17,2026-08-20,2026-08-20,3000,,1,85,,,Acme Industrial,LOG-100
+SHP-10011,BOL-10011,XPOL,XPO Logistics,ltl,standard,Miami,FL,33142,Cleveland,OH,44115,,2026-08-18,2026-08-21,2026-08-21,600,,1,,,,Gulf Distributors,LOG-200
+SHP-10012,BOL-10012,ODFL,Old Dominion Freight Line,ltl,standard,Dallas,TX,75201,Denver,CO,80216,,2026-08-19,2026-08-22,2026-08-22,450,,1,,,LIFTGATE,Acme Industrial,LOG-100
+SHP-10013,BOL-10013,ODFL,Old Dominion Freight Line,ltl,standard,Atlanta,GA,30336,Dallas,TX,75201,,2026-08-20,2026-08-24,2026-08-24,250,,1,,,,Northwind Retail,LOG-100
+SHP-10014,BOL-10014,UPSN,UPS,parcel,ground,Chicago,IL,60607,Detroit,MI,48207,,2026-08-21,2026-08-24,2026-08-24,5,,1,,,RESIDENTIAL,DTC Orders,ECOM-010
+SHP-10015,BOL-10015,XPOL,XPO Logistics,ltl,standard,Los Angeles,CA,90021,Dallas,TX,75201,,2026-09-02,2026-09-05,2026-09-05,1800,,1,,,APPOINTMENT,Northwind Retail,LOG-200
+SHP-10016,BOL-10016,CHRW,C.H. Robinson,ftl,standard,Los Angeles,CA,90021,Chicago,IL,60607,2050,2026-09-03,2026-09-07,2026-09-07,42000,,26,,,,Gulf Distributors,LOG-300
+SHP-10017,BOL-10017,FDEG,FedEx,parcel,ground,Atlanta,GA,30336,Charleston,SC,29405,,2026-09-04,2026-09-08,2026-09-08,45,,1,,,RESIDENTIAL,DTC Orders,ECOM-010
+SHP-10018,BOL-10018,ODFL,Old Dominion Freight Line,ltl,standard,Seattle,WA,98108,Phoenix,AZ,85009,,2026-09-08,2026-09-11,2026-09-11,6000,,1,60,,,Acme Industrial,LOG-100
+SHP-10020,BOL-10020,XPOL,XPO Logistics,ltl,standard,Chicago,IL,60607,Dallas,TX,75201,,2026-09-09,2026-09-12,2026-09-12,1100,,1,,,LIFTGATE|RESIDENTIAL,Northwind Retail,LOG-200
+SHP-10021,BOL-10021,ODFL,Old Dominion Freight Line,ltl,standard,Denver,CO,80216,Albuquerque,NM,87105,,2026-09-10,2026-09-14,2026-09-14,1250,,1,,,,Acme Industrial,LOG-100
+SHP-10022,BOL-10022,FDEG,FedEx,parcel,ground,Atlanta,GA,30336,Memphis,TN,38118,,2026-09-14,2026-09-17,2026-09-17,22,,1,,,,DTC Orders,ECOM-010
+SHP-10023,BOL-10023,ODFL,Old Dominion Freight Line,ltl,standard,Detroit,MI,48207,Memphis,TN,38118,,2026-09-15,2026-09-18,2026-09-18,2200,,1,85,,,Acme Industrial,LOG-100
+SHP-10024,BOL-10024,XPOL,XPO Logistics,ltl,standard,Newark,NJ,07102,Charleston,SC,29405,,2026-09-16,2026-09-19,2026-09-22,950,,1,,,,Gulf Distributors,LOG-200
+SHP-10025,BOL-10025,ODFL,Old Dominion Freight Line,ltl,standard,Phoenix,AZ,85009,Los Angeles,CA,90021,,2026-10-01,2026-10-05,2026-10-05,1750,,1,,,INSIDE_DELIVERY,Northwind Retail,LOG-100

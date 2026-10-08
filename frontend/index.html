@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreightLens — Freight Audit</title>
+<style>
+  /* Light palette is the base; dark redefines only the tokens. */
+  :root {
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --muted:       #898781;
+    --grid:        #e1e0d9;
+    --rule:        #c3c2b7;
+    --border:      rgba(11,11,11,0.10);
+    --series:      #2a78d6;
+    --series-soft: #cde2fb;
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    --serious:     #ec835a;
+    --critical:    #d03b3b;
+    --shadow:      0 1px 2px rgba(11,11,11,.04), 0 1px 12px rgba(11,11,11,.04);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
+      --muted: #898781; --grid: #2c2c2a; --rule: #383835;
+      --border: rgba(255,255,255,0.10); --series: #3987e5; --series-soft: #184f95;
+      --shadow: none; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 20px 64px; }
+
+  header.bar {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--rule);
+  }
+  .brand { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+  .brand span { color: var(--series); }
+  .customer { color: var(--ink-2); font-size: 14px; }
+  button {
+    font: inherit; font-weight: 550; color: var(--surface); background: var(--ink);
+    border: 0; border-radius: 6px; padding: 7px 14px; cursor: pointer;
+  }
+  button:hover { opacity: .88; }
+  button[disabled] { opacity: .5; cursor: default; }
+
+  h2 {
+    font-size: 12px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--muted); margin: 34px 0 12px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow);
+  }
+
+  /* ---- pipeline diagram ------------------------------------------------ */
+  .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 18px; }
+  .sources { display: grid; gap: 6px; }
+  .node {
+    border: 1px solid var(--rule); border-radius: 6px; padding: 7px 11px;
+    font-size: 13px; color: var(--ink-2); white-space: nowrap; background: var(--page);
+  }
+  .node b { color: var(--ink); font-weight: 600; }
+  .arrow { color: var(--muted); font-size: 18px; }
+  .engine {
+    border: 1px solid var(--series); color: var(--series); background: var(--series-soft);
+    border-radius: 6px; padding: 11px 15px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .engine { color: #fff; }
+  }
+
+  /* ---- stat tiles ------------------------------------------------------ */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .tile { padding: 16px 18px; }
+  .tile .val { font-size: 30px; font-weight: 640; letter-spacing: -0.02em; line-height: 1.15; }
+  .tile .lbl { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+  .tile .sub { font-size: 12px; color: var(--muted); margin-top: 7px; }
+  .tile.accent .val { color: var(--series); }
+
+  /* ---- rule bars ------------------------------------------------------- */
+  .bars { padding: 6px 18px 14px; }
+  .bar-row {
+    display: grid; grid-template-columns: 1fr 96px; align-items: center;
+    gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--grid);
+  }
+  .bar-row:last-child { border-bottom: 0; }
+  .bar-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; font-size: 14px; }
+  .track { height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; background: var(--series); border-radius: 4px; min-width: 3px; }
+  .bar-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 580; }
+  .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* severity chips: color + text, never color alone */
+  .chip {
+    font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap;
+  }
+  .sev-critical { color: var(--critical); }
+  .sev-high     { color: var(--serious); }
+  .sev-medium   { color: var(--warning); }
+  .sev-low      { color: var(--good); }
+
+  /* ---- tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left; font-size: 11px; font-weight: 650; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); padding: 11px 14px;
+    border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--grid); }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--page); }
+  tbody tr[aria-selected="true"] { background: var(--series-soft); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mono { font-variant-numeric: tabular-nums; }
+
+  /* ---- drill-down ------------------------------------------------------ */
+  #detail { padding: 18px; }
+  .d-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .d-inv { font-size: 19px; font-weight: 640; }
+  .d-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 22px; margin-top: 16px; }
+  .d-grid dt { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .d-grid dd { margin: 3px 0 11px; }
+  .recon { margin-top: 4px; }
+  .recon div { display: flex; justify-content: space-between; gap: 20px; padding: 7px 0; font-variant-numeric: tabular-nums; }
+  .recon .tot { border-top: 1px solid var(--rule); font-weight: 650; }
+  .recon .tot span:last-child { color: var(--critical); }
+  .finding { border-left: 3px solid var(--serious); padding: 2px 0 2px 13px; margin-top: 16px; }
+  .finding .f-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .finding p { margin: 7px 0 0; color: var(--ink-2); font-size: 14px; }
+  .finding .rec { color: var(--ink); }
+  .empty { color: var(--muted); padding: 22px 18px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .err { color: var(--critical); padding: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="bar">
+    <div>
+      <div class="brand">Freight<span>Lens</span></div>
+      <div class="customer">Acme Corporation &middot; freight audit &amp; spend intelligence</div>
+    </div>
+    <button id="run">Run Audit</button>
+  </header>
+
+  <h2>How it works</h2>
+  <div class="card flow">
+    <div class="sources">
+      <div class="node"><b id="n-ship">—</b> shipments <span style="color:var(--muted)">(TMS)</span></div>
+      <div class="node"><b id="n-rate">—</b> contracted rates</div>
+      <div class="node"><b id="n-inv">—</b> carrier invoices</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">Normalize</div>
+    <div class="arrow">&rarr;</div>
+    <div class="engine">Audit Engine &middot; <span id="n-rules">6</span> rules</div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><b id="n-exc">—</b> exceptions</div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><b id="n-save">—</b> recoverable</div>
+  </div>
+
+  <h2>Freight audit summary</h2>
+  <div class="tiles" id="tiles"></div>
+
+  <h2>Audit results by rule</h2>
+  <div class="card bars" id="rules"></div>
+
+  <h2>Exceptions</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr>
+        <th>Invoice</th><th>Carrier</th><th>Shipment</th><th>Issue</th>
+        <th>Severity</th><th class="num">Variance</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p class="hint">Select a row to see the shipment, the contracted rate and what the carrier billed.</p>
+
+  <h2>Invoice detail</h2>
+  <div class="card" id="detail"><div class="empty">No invoice selected.</div></div>
+
+</div>
+
+<script>
+const API = "/api/v1";
+const usd = n => "$" + Number(n).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const usd0 = n => "$" + Math.round(Number(n)).toLocaleString("en-US");
+const pct = n => (Number(n) * 100).toFixed(1) + "%";
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const get = async p => { const r = await fetch(API + p); if (!r.ok) throw new Error(p + " -> " + r.status); return r.json(); };
+
+function tiles(s) {
+  const box = document.getElementById("tiles");
+  box.replaceChildren(...[
+    [usd0(s.total_billed), "Freight Spend", `${s.shipments} shipments audited`, ""],
+    [s.invoices_audited, "Invoices Audited", `${usd(s.average_cost_per_shipment)} avg per shipment`, ""],
+    [s.exceptions_detected, "Exceptions Detected", `${pct(s.exception_rate)} of invoices flagged`, ""],
+    [usd0(s.recoverable_amount), "Potential Savings", `${pct(s.overcharge_rate)} of total spend`, "accent"],
+  ].map(([v, l, sub, cls]) => {
+    const c = el("div", "card tile " + cls);
+    c.append(el("div", "val", String(v)), el("div", "lbl", l), el("div", "sub", sub));
+    return c;
+  }));
+}
+
+function ruleBars(byRule) {
+  const box = document.getElementById("rules");
+  const priced = byRule.filter(r => Number(r.variance_amount) > 0);
+  if (!priced.length) { box.replaceChildren(el("div", "empty", "No exceptions — run the audit.")); return; }
+  const max = Math.max(...priced.map(r => Number(r.variance_amount)));
+  box.replaceChildren(...priced.map(r => {
+    const row = el("div", "bar-row");
+    const left = el("div");
+    const head = el("div", "bar-head");
+    head.append(
+      el("span", "chip sev-" + r.severity, r.severity),
+      el("span", null, r.rule_name),
+      el("span", "count", `${r.count}×`),
+    );
+    const track = el("div", "track");
+    const fill = el("div", "fill");
+    fill.style.width = (Number(r.variance_amount) / max * 100).toFixed(1) + "%";
+    track.append(fill);
+    left.append(head, track);
+    row.append(left, el("div", "bar-val", usd(r.variance_amount)));
+    row.title = `${r.rule_name}: ${r.count} exception(s), ${usd(r.variance_amount)}`;
+    return row;
+  }));
+}
+
+function table(items) {
+  const body = document.getElementById("rows");
+  if (!items.length) {
+    body.replaceChildren(el("tr", null, '<td colspan="6" class="empty">No exceptions found.</td>'));
+    return;
+  }
+  body.replaceChildren(...items.map(e => {
+    const tr = el("tr");
+    tr.innerHTML = `
+      <td class="mono">${e.invoice_number ?? "—"}</td>
+      <td>${e.carrier_scac ?? "—"}</td>
+      <td class="mono">${e.shipment_reference ?? "—"}</td>
+      <td>${e.rule_name}</td>
+      <td><span class="chip sev-${e.severity}">${e.severity}</span></td>
+      <td class="num">${Number(e.variance_amount) ? usd(e.variance_amount) : "—"}</td>`;
+    tr.onclick = () => {
+      body.querySelectorAll("tr").forEach(r => r.removeAttribute("aria-selected"));
+      tr.setAttribute("aria-selected", "true");
+      detail(e.invoice_id);
+      document.getElementById("detail").scrollIntoView({behavior: "smooth", block: "center"});
+    };
+    return tr;
+  }));
+}
+
+async function detail(invoiceId) {
+  const box = document.getElementById("detail");
+  if (!invoiceId) { box.replaceChildren(el("div", "empty", "This exception has no invoice.")); return; }
+  box.replaceChildren(el("div", "empty", "Loading…"));
+  let d;
+  try { d = await get(`/invoices/${invoiceId}/audit`); }
+  catch (err) { box.replaceChildren(el("div", "err", String(err))); return; }
+
+  const inv = d.invoice, s = d.shipment;
+  const lane = s ? `${s.origin_city ?? s.origin_state}, ${s.origin_state} → ${s.dest_city ?? s.dest_state}, ${s.dest_state}` : "—";
+  const top = el("div", "d-top");
+  top.append(el("div", "d-inv", inv.invoice_number), el("div", "customer", `${inv.carrier_scac} · invoiced ${inv.invoice_date}`));
+
+  const grid = el("dl", "d-grid");
+  grid.innerHTML = `
+    <div>
+      <dt>Shipment</dt>
+      <dd>${s ? s.shipment_id : "not found in TMS"}</dd>
+      <dt>Lane</dt><dd>${lane}</dd>
+      <dt>Service</dt>
+      <dd>${s ? `${s.mode.toUpperCase()} · ${s.service_level} · ${Number(s.weight_lb).toLocaleString()} lb · ${s.pieces} pcs` : "—"}</dd>
+      ${s && s.accessorials ? `<dt>Accessorials ordered</dt><dd>${s.accessorials.split("|").join(", ")}</dd>` : ""}
+    </div>
+    <div>
+      <dt>Reconciliation</dt>
+      <dd class="recon">
+        <div><span>Contracted rate</span><span>${usd(d.expected_total)}</span></div>
+        <div><span>Carrier invoice</span><span>${usd(d.billed_total)}</span></div>
+        <div class="tot"><span>Potential overcharge</span><span>${usd(d.variance_total)}</span></div>
+      </dd>
+    </div>`;
+
+  const findings = d.exceptions.map(e => {
+    const f = el("div", "finding");
+    const head = el("div", "f-head");
+    head.append(
+      el("span", "chip sev-" + e.severity, e.severity),
+      el("strong", null, e.rule_code),
+      el("span", "count", Number(e.variance_amount) ? usd(e.variance_amount) : "no dollar impact"),
+    );
+    f.append(head, el("p", null, e.message));
+    if (e.recommendation) f.append(el("p", "rec", "→ " + e.recommendation));
+    return f;
+  });
+
+  box.replaceChildren(top, grid, ...findings);
+}
+
+async function load() {
+  const [summary, exceptions, rules, shipments, rates] = await Promise.all([
+    get("/analytics/summary"),
+    get("/audits/exceptions?limit=50"),
+    get("/audits/rules"),
+    get("/shipments?limit=1"),
+    get("/rates?limit=1"),
+  ]);
+  tiles(summary);
+  ruleBars(summary.by_rule);
+  table(exceptions.items);
+  document.getElementById("n-ship").textContent = shipments.total;
+  document.getElementById("n-rate").textContent = rates.total;
+  document.getElementById("n-inv").textContent  = summary.invoices_audited;
+  document.getElementById("n-exc").textContent  = summary.exceptions_detected;
+  document.getElementById("n-save").textContent = usd0(summary.recoverable_amount);
+  document.getElementById("n-rules").textContent = rules.length;
+}
+
+document.getElementById("run").onclick = async (ev) => {
+  const b = ev.currentTarget;
+  b.disabled = true; b.textContent = "Auditing…";
+  try {
+    await fetch(API + "/audits/run", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({triggered_by: "dashboard"}),
+    });
+    await load();
+    document.getElementById("detail").replaceChildren(el("div", "empty", "No invoice selected."));
+  } finally { b.disabled = false; b.textContent = "Run Audit"; }
+};
+
+load().catch(e => document.querySelector(".wrap").append(el("div", "err", "Could not reach the API: " + e)));
+</script>
+</body>
+</html>
