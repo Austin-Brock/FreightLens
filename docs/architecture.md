@@ -15,7 +15,7 @@
                               SQLite (6 tables)
                                     ▼
                         services/audit_engine.py
-           RateBook lookup → expected cost → 6 rules → AuditFinding
+           RateBook lookup → expected cost → 7 rules → AuditFinding
                                     ▼
                             audit_exceptions
                    (billed vs expected vs variance, per rule)
@@ -75,7 +75,7 @@ from `shipment_id` (the resolved foreign key). That separation is deliberate: an
 invoice whose reference matches nothing is not a bug to be discarded, it's the
 `MISSING_SHIPMENT` finding.
 
-## The six rules
+## The seven rules
 
 Each rule is one comparison between two of the three data sources.
 
@@ -86,6 +86,7 @@ Each rule is one comparison between two of the three data sources.
 | `UNCONTRACTED_CHARGE` | invoice ↔ contract | A charge with no rate on file at all |
 | `ACCESSORIAL_NOT_ORDERED` | invoice ↔ shipment | A service billed that the shipper never requested |
 | `DUPLICATE_INVOICE` | invoice ↔ other invoices | Same carrier, shipment and amount billed twice |
+| `SERVICE_FAILURE` | shipment ↔ commitment | Delivery after the promised date. Claimable only on a guaranteed service, where the transportation charges are refundable; on any other service the miss is tracked at $0 |
 | `MISSING_SHIPMENT` | invoice ↔ nothing | A bill that matches no shipment of record — a data-quality failure, flagged but never claimed as savings |
 
 **Tolerances** (`app/config.py`): variances under **$1.00** or **2%** of
@@ -95,8 +96,12 @@ auditing at the penny produces findings nobody can action.
 **Precedence matters.** `MISSING_SHIPMENT` short-circuits — with no shipment
 there is nothing to validate, so no other rule runs. `ACCESSORIAL_NOT_ORDERED`
 takes precedence over `UNCONTRACTED_CHARGE` on the same charge code, so one
-accessorial never claims the same dollar twice. `MISSING_SHIPMENT` is marked
-non-monetary and is excluded from recoverable totals.
+accessorial never claims the same dollar twice. A claimable `SERVICE_FAILURE`
+suppresses `RATE_MISMATCH` and `FUEL_SURCHARGE_VARIANCE` on the same invoice —
+the guarantee refunds the whole transportation charge, and you do not argue the
+rate on a bill you are refusing — while accessorials still stand, because those
+services were performed. `MISSING_SHIPMENT` is marked non-monetary and is
+excluded from recoverable totals.
 
 ## Request flow
 

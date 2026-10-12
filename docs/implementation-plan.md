@@ -135,7 +135,7 @@ than in a phase 2.
 | Invoice intake | DHL sends EDI 210, not CSV. First EDI carrier in scope — new parser, new transmission setup, new test cycle with DHL. | +6d (task 19) |
 | Charge-code crosswalk | ~9 DHL-specific accessorial codes to map (e.g. `DDU`, `RDI`, `OVR`). | +1d (task 13) |
 | Shipment feed | TMS already records DHL shipments — no change. | 0d |
-| Audit rules | Same 6 rules apply. No new rule logic. | 0d |
+| Audit rules | Same 7 rules apply. No new rule logic. | 0d |
 | UAT | DHL test cases added; parcel test set re-run. | +2d (tasks 26, 27) |
 | Historical backload | 90 days of DHL invoices to source and load. | +1d (task 21) |
 

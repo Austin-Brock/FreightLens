@@ -383,6 +383,95 @@ def test_audited_invoices_are_marked_clean_or_disputed(db):
     assert good.status == "audited"
 
 
+def test_a_missed_guarantee_claims_the_transportation_charges(db):
+    rate = make_rate(service_level="guaranteed", base_rate=Decimal("30.00"))
+    shipment = make_shipment(
+        db,
+        service_level="guaranteed",
+        promised_date=date(2026, 3, 5),
+        delivery_date=date(2026, 3, 7),
+    )
+    invoice = make_invoice(
+        db, shipment=shipment, lines=[("FREIGHT", "300.00"), ("FUEL", "66.00")]
+    )
+
+    finding = only(engine(rate).audit_invoice(invoice), "SERVICE_FAILURE")
+    assert finding.variance_amount == Decimal("366.00")
+    assert finding.resolved_severity == ExceptionSeverity.HIGH
+    assert "2 days after" in finding.message
+
+
+def test_a_late_delivery_on_standard_service_is_tracked_but_not_claimed(db):
+    """A standard tariff promises a transit estimate, not a refund."""
+    rate = make_rate(base_rate=Decimal("30.00"))
+    shipment = make_shipment(
+        db, promised_date=date(2026, 3, 5), delivery_date=date(2026, 3, 6)
+    )
+    invoice = make_invoice(
+        db, shipment=shipment, lines=[("FREIGHT", "300.00"), ("FUEL", "66.00")]
+    )
+
+    finding = only(engine(rate).audit_invoice(invoice), "SERVICE_FAILURE")
+    assert finding.variance_amount == Decimal("0.00")
+    assert finding.resolved_severity == ExceptionSeverity.LOW
+    assert "1 day after" in finding.message
+    assert "No contractual remedy" in finding.recommendation
+
+
+def test_a_guarantee_claim_does_not_also_re_rate_the_freight(db):
+    """One disputed bill, one claim — you don't argue the rate on a bill you refuse."""
+    rate = make_rate(service_level="guaranteed", base_rate=Decimal("30.00"))
+    shipment = make_shipment(
+        db,
+        service_level="guaranteed",
+        promised_date=date(2026, 3, 5),
+        delivery_date=date(2026, 3, 7),
+    )
+    # Billed well above the 10 cwt x 30.00 = 300.00 contract, and late.
+    invoice = make_invoice(
+        db,
+        shipment=shipment,
+        lines=[("FREIGHT", "500.00"), ("FUEL", "110.00"), ("LIFTGATE", "95.00")],
+    )
+
+    findings = engine(rate).audit_invoice(invoice)
+    assert sorted(codes(findings)) == ["ACCESSORIAL_NOT_ORDERED", "SERVICE_FAILURE"]
+    # The whole transportation charge is claimed once, not re-rated on top.
+    assert only(findings, "SERVICE_FAILURE").variance_amount == Decimal("610.00")
+    assert only(findings, "ACCESSORIAL_NOT_ORDERED").variance_amount == Decimal("95.00")
+
+
+def test_on_time_and_undated_deliveries_raise_nothing(db):
+    rate = make_rate(service_level="guaranteed", base_rate=Decimal("30.00"))
+    on_time = make_invoice(
+        db,
+        shipment=make_shipment(
+            db,
+            shipment_id="SHP-ONTIME",
+            service_level="guaranteed",
+            promised_date=date(2026, 3, 5),
+            delivery_date=date(2026, 3, 5),
+        ),
+        lines=[("FREIGHT", "300.00")],
+    )
+    in_transit = make_invoice(
+        db,
+        invoice_number="INV-2",
+        shipment=make_shipment(
+            db,
+            shipment_id="SHP-OPEN",
+            service_level="guaranteed",
+            promised_date=date(2026, 3, 5),
+            delivery_date=None,
+        ),
+        lines=[("FREIGHT", "300.00")],
+    )
+
+    audit = engine(rate)
+    assert "SERVICE_FAILURE" not in codes(audit.audit_invoice(on_time))
+    assert "SERVICE_FAILURE" not in codes(audit.audit_invoice(in_transit))
+
+
 def test_the_sample_data_exercises_every_rule(seeded_db):
     """The bundled fixtures are the engine's end-to-end regression case."""
     from app.services.rules import RULES
@@ -391,7 +480,7 @@ def test_the_sample_data_exercises_every_rule(seeded_db):
     fired = {exc.rule_code for exc in seeded_db.query(AuditException).all()}
 
     assert fired == set(RULES), f"rules never exercised: {sorted(set(RULES) - fired)}"
-    assert len(RULES) == 6
+    assert len(RULES) == 7
     assert run.invoices_audited == 27
     # Rate validation is the headline finding, which is what the demo narrates.
     by_rule = {}

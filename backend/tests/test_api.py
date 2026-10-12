@@ -219,7 +219,7 @@ def test_create_rate(client):
 
 def test_rule_catalogue_is_published(client):
     rules = client.get(f"{V1}/audits/rules").json()
-    assert len(rules) == 6
+    assert len(rules) == 7
     assert {"code", "name", "severity", "description", "monetary"} == set(rules[0])
 
 
@@ -313,7 +313,8 @@ def test_summary_reconciles_billed_expected_and_variance(seeded_client, seeded_d
     # The per-rule breakdown is embedded, so one call drives the dashboard.
     assert {row["rule_code"] for row in body["by_rule"]} == {
         "RATE_MISMATCH", "DUPLICATE_INVOICE", "ACCESSORIAL_NOT_ORDERED",
-        "UNCONTRACTED_CHARGE", "FUEL_SURCHARGE_VARIANCE", "MISSING_SHIPMENT",
+        "UNCONTRACTED_CHARGE", "FUEL_SURCHARGE_VARIANCE", "SERVICE_FAILURE",
+        "MISSING_SHIPMENT",
     }
     assert body["by_rule"][0]["rule_code"] == "RATE_MISMATCH"
 

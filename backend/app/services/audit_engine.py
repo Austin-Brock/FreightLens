@@ -40,7 +40,7 @@ from app.models import (
     TransportMode,
 )
 from app.schemas.audit import AuditRunRequest
-from app.services.rules import RULES, RuleSpec, rule
+from app.services.rules import RULES, RuleSpec, is_guaranteed, rule
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +335,15 @@ class AuditEngine:
         )
         billed_linehaul = money(invoice.amount_for(ChargeCode.FREIGHT.value))
 
+        service_findings = self._check_service(invoice, shipment)
+        findings.extend(service_findings)
+        if any(finding.variance_amount > ZERO for finding in service_findings):
+            # The guarantee refunds the transportation charges outright, so
+            # re-rating them would claim the same dollars twice. Accessorials
+            # stand: those services were still performed.
+            findings.extend(self._check_accessorials(invoice, shipment))
+            return _stamp(findings, currency)
+
         # Nothing to price against — or nothing to price *with* — so the
         # linehaul is taken at face value and fuel is measured against what was
         # actually billed.
@@ -484,6 +493,46 @@ class AuditEngine:
                     f"({pct_label} of {expected_linehaul})."
                 ),
                 recommendation=f"Dispute {variance} of fuel surcharge.",
+            )
+        ]
+
+    def _check_service(
+        self, invoice: CarrierInvoice, shipment: Shipment
+    ) -> list[AuditFinding]:
+        """Compare delivery against the commitment the service level carries."""
+        if not shipment.is_late:
+            return []
+
+        days_late = (shipment.delivery_date - shipment.promised_date).days
+        transportation = money(
+            invoice.amount_for(ChargeCode.FREIGHT.value)
+            + invoice.amount_for(ChargeCode.FUEL.value)
+        )
+        guaranteed = is_guaranteed(shipment.service_level)
+        plural = "" if days_late == 1 else "s"
+
+        return [
+            AuditFinding(
+                rule_code="SERVICE_FAILURE",
+                charge_code=ChargeCode.FREIGHT.value,
+                billed_amount=transportation,
+                # Only a guarantee turns a late delivery into money. On every
+                # other service the charge stands, so expected == billed and
+                # the finding carries no claim.
+                expected_amount=ZERO if guaranteed else transportation,
+                severity=None if guaranteed else ExceptionSeverity.LOW,
+                message=(
+                    f"Shipment {shipment.shipment_id} delivered "
+                    f"{shipment.delivery_date}, {days_late} day{plural} after the "
+                    f"{shipment.promised_date} commitment on "
+                    f"{shipment.service_level} service."
+                ),
+                recommendation=(
+                    f"Claim the {transportation} of freight and fuel under the "
+                    "service guarantee."
+                    if guaranteed
+                    else "No contractual remedy; track against the carrier scorecard."
+                ),
             )
         ]
 

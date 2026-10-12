@@ -4,12 +4,16 @@ Keeping the metadata in one table means the API, the UI legend and the docs all
 describe a rule the same way, and adding a rule is a two-step change: register
 it here, implement it in :mod:`app.services.audit_engine`.
 
-Six rules, chosen to cover the four comparisons a freight audit actually makes:
+Seven rules, covering the four comparisons a freight audit actually makes:
 
 * invoice vs. contract      -> RATE_MISMATCH, FUEL_SURCHARGE_VARIANCE, UNCONTRACTED_CHARGE
 * invoice vs. shipment      -> ACCESSORIAL_NOT_ORDERED
 * invoice vs. other invoices-> DUPLICATE_INVOICE
 * invoice vs. nothing       -> MISSING_SHIPMENT (a data-quality failure)
+
+and one that compares the shipment against what the service promised:
+
+* shipment vs. commitment   -> SERVICE_FAILURE
 """
 
 from __future__ import annotations
@@ -68,6 +72,14 @@ RULES: dict[str, RuleSpec] = {
             "contract allows, or applied to an inflated linehaul.",
         ),
         RuleSpec(
+            "SERVICE_FAILURE",
+            "Delivered after the service commitment",
+            ExceptionSeverity.HIGH,
+            "Delivery missed the promised date. Under a guaranteed service the "
+            "transportation charges are refundable; on any other service the "
+            "miss is tracked but not claimable.",
+        ),
+        RuleSpec(
             "MISSING_SHIPMENT",
             "Invoice cannot be matched to a shipment",
             ExceptionSeverity.HIGH,
@@ -86,3 +98,12 @@ def rule(code: str) -> RuleSpec:
 MONETARY_RULES: frozenset[str] = frozenset(
     spec.code for spec in RULES.values() if spec.monetary
 )
+
+#: Service levels whose contract carries a money-back guarantee. Anything else
+#: delivering late is a performance problem, not a billing one — a standard LTL
+#: tariff promises a transit estimate, not a refund.
+GUARANTEED_SERVICE_LEVELS: frozenset[str] = frozenset({"guaranteed", "guaranteed_am", "absolute"})
+
+
+def is_guaranteed(service_level: str | None) -> bool:
+    return (service_level or "").strip().lower() in GUARANTEED_SERVICE_LEVELS

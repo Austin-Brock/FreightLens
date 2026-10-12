@@ -29,7 +29,7 @@ the audit — so the dashboard is populated immediately. Delete
 `backend/freightlens.db` to start over.
 
 ```bash
-pytest            # 89 tests, ~1s
+pytest            # 105 tests, ~1s
 ```
 
 ## What it finds in the sample data
@@ -41,17 +41,24 @@ three modes (parcel, LTL, truckload):
 |---|---|
 | Freight spend | **$20,639.85** |
 | Invoices audited | **27** |
-| Exceptions detected | **12** |
-| Recoverable | **$1,329.15** (6.4% of spend) |
+| Exceptions detected | **15** |
+| Recoverable | **$1,691.49** (8.2% of spend) |
 
 | Rule | Count | Variance |
 |---|---|---|
 | Linehaul billed above contracted rate | 2 | $508.00 |
+| Delivered after the service commitment | 3 | $362.34 |
 | Accessorial billed but never ordered | 4 | $335.45 |
 | Duplicate invoice for the same shipment | 1 | $217.62 |
 | Fuel surcharge above contracted percentage | 3 | $158.88 |
 | Charge has no contracted rate | 1 | $109.20 |
 | Invoice cannot be matched to a shipment | 1 | — |
+
+Only one of the three late deliveries carries a claim: ODFL missed a
+**guaranteed** LTL commitment by two days, which refunds the $362.34 of
+freight and fuel. The other two ran late on standard and express service,
+where the tariff promises a transit estimate and not a refund — they are
+tracked against the carrier scorecard at $0.
 
 The largest finding: XPO billed **$900.00** of linehaul on a CA→TX lane
 contracted at **$480.00** ($32.00/cwt less a 40% lane discount on 2,500 lb) —
@@ -68,10 +75,10 @@ backend/app/
   services/
     ingestion.py     CSV → normalized records
     audit_engine.py  pure rule engine + thin persistence wrapper
-    rules.py         the 6-rule catalogue
+    rules.py         the 7-rule catalogue
     analytics.py     the dashboard summary
   db/          engine, session, schema creation, sample-data seed
-backend/tests/ 89 tests
+backend/tests/ 105 tests
 frontend/      index.html — the dashboard, one file, no build step
 sample_data/   the three input CSVs
 docs/          architecture.md · glossary.md · implementation-plan.md
