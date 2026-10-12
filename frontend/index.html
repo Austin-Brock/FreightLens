@@ -53,6 +53,21 @@
   button:hover { opacity: .88; }
   button[disabled] { opacity: .5; cursor: default; }
 
+  .actions { display: flex; align-items: center; gap: 14px; }
+  .link {
+    font-size: 14px; font-weight: 550; color: var(--series); text-decoration: none;
+    border-bottom: 1px solid transparent; white-space: nowrap;
+  }
+  .link:hover { border-bottom-color: currentColor; }
+
+  /* on-time reads as a number first; the bar is a sighted shortcut, not the data */
+  .meter {
+    display: inline-block; vertical-align: middle; width: 54px; height: 6px;
+    margin-left: 9px; background: var(--grid); border-radius: 3px; overflow: hidden;
+  }
+  .meter i { display: block; height: 100%; background: var(--series); border-radius: 3px; }
+  .meter.late i { background: var(--serious); }
+
   h2 {
     font-size: 12px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase;
     color: var(--muted); margin: 34px 0 12px;
@@ -154,7 +169,10 @@
       <div class="brand">Freight<span>Lens</span></div>
       <div class="customer">Acme Corporation &middot; freight audit &amp; spend intelligence</div>
     </div>
-    <button id="run">Run Audit</button>
+    <div class="actions">
+      <a class="link" id="export" href="/api/v1/audits/exceptions.csv" download>Export disputes (CSV)</a>
+      <button id="run">Run Audit</button>
+    </div>
   </header>
 
   <h2>How it works</h2>
@@ -179,6 +197,19 @@
 
   <h2>Audit results by rule</h2>
   <div class="card bars" id="rules"></div>
+
+  <h2>Carrier performance</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr>
+        <th>Carrier</th><th class="num">Shipments</th><th class="num">Invoices</th>
+        <th class="num">Spend</th><th class="num">Exceptions</th>
+        <th class="num">Variance</th><th class="num">Error rate</th><th>On time</th>
+      </tr></thead>
+      <tbody id="carriers"></tbody>
+    </table>
+  </div>
+  <p class="hint">Error rate is variance as a share of what the carrier billed.</p>
 
   <h2>Exceptions</h2>
   <div class="card scroll">
@@ -241,6 +272,30 @@ function ruleBars(byRule) {
     row.append(left, el("div", "bar-val", usd(r.variance_amount)));
     row.title = `${r.rule_name}: ${r.count} exception(s), ${usd(r.variance_amount)}`;
     return row;
+  }));
+}
+
+function carriers(cards) {
+  const body = document.getElementById("carriers");
+  if (!cards.length) {
+    body.replaceChildren(el("tr", null, '<td colspan="8" class="empty">No carriers yet.</td>'));
+    return;
+  }
+  body.replaceChildren(...cards.map(c => {
+    const onTime = c.on_time_rate == null ? null : Number(c.on_time_rate);
+    const tr = el("tr");
+    tr.style.cursor = "default";
+    tr.innerHTML = `
+      <td><strong>${c.carrier_scac}</strong>${c.carrier_name ? ` <span class="count">${c.carrier_name}</span>` : ""}</td>
+      <td class="num">${c.shipments}</td>
+      <td class="num">${c.invoices}</td>
+      <td class="num">${usd(c.total_billed)}</td>
+      <td class="num">${c.exceptions || "—"}</td>
+      <td class="num">${Number(c.total_variance) ? usd(c.total_variance) : "—"}</td>
+      <td class="num">${Number(c.variance_rate) ? pct(c.variance_rate) : "—"}</td>
+      <td class="mono">${onTime == null ? "—" : pct(onTime) +
+        `<span class="meter${onTime < 1 ? " late" : ""}"><i style="width:${(onTime * 100).toFixed(0)}%"></i></span>`}</td>`;
+    return tr;
   }));
 }
 
@@ -318,15 +373,17 @@ async function detail(invoiceId) {
 }
 
 async function load() {
-  const [summary, exceptions, rules, shipments, rates] = await Promise.all([
+  const [summary, exceptions, rules, shipments, rates, scorecards] = await Promise.all([
     get("/analytics/summary"),
     get("/audits/exceptions?limit=50"),
     get("/audits/rules"),
     get("/shipments?limit=1"),
     get("/rates?limit=1"),
+    get("/analytics/carriers"),
   ]);
   tiles(summary);
   ruleBars(summary.by_rule);
+  carriers(scorecards);
   table(exceptions.items);
   document.getElementById("n-ship").textContent = shipments.total;
   document.getElementById("n-rate").textContent = rates.total;
