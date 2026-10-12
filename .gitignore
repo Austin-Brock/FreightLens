@@ -24,3 +24,6 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Alembic bytecode from generated revisions
+migrations/**/__pycache__/
