@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import csv
+import io
+from collections.abc import Iterator
+from datetime import date
+
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi.responses import StreamingResponse
+from sqlalchemy import Select, func, select
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import DbSession, PageParams
-from app.models import AuditException, AuditRun
+from app.models import AuditException, AuditRun, CarrierInvoice
 from app.schemas import (
     AuditExceptionRead,
     AuditExceptionUpdate,
@@ -64,17 +71,16 @@ def latest_run(db: DbSession) -> AuditRunRead:
     return AuditRunRead.model_validate(run)
 
 
-@router.get("/exceptions", response_model=Page[AuditExceptionRead])
-def list_exceptions(
-    db: DbSession,
-    page: PageParams,
+def _filtered_exceptions(
+    *,
     rule_code: str | None = None,
     severity: str | None = None,
-    exception_status: str | None = Query(None, alias="status"),
+    exception_status: str | None = None,
     carrier_scac: str | None = None,
     run_id: int | None = None,
     min_variance: float | None = None,
-) -> Page[AuditExceptionRead]:
+) -> Select:
+    """The one place exception filters are interpreted, for JSON and CSV alike."""
     stmt = select(AuditException)
     if rule_code:
         stmt = stmt.where(AuditException.rule_code == rule_code.upper())
@@ -87,11 +93,31 @@ def list_exceptions(
     if min_variance is not None:
         stmt = stmt.where(AuditException.variance_amount >= min_variance)
     if carrier_scac:
-        from app.models import CarrierInvoice  # local import avoids an unused global
-
         stmt = stmt.join(
             CarrierInvoice, AuditException.invoice_id == CarrierInvoice.id
         ).where(CarrierInvoice.carrier_scac == carrier_scac.upper())
+    return stmt
+
+
+@router.get("/exceptions", response_model=Page[AuditExceptionRead])
+def list_exceptions(
+    db: DbSession,
+    page: PageParams,
+    rule_code: str | None = None,
+    severity: str | None = None,
+    exception_status: str | None = Query(None, alias="status"),
+    carrier_scac: str | None = None,
+    run_id: int | None = None,
+    min_variance: float | None = None,
+) -> Page[AuditExceptionRead]:
+    stmt = _filtered_exceptions(
+        rule_code=rule_code,
+        severity=severity,
+        exception_status=exception_status,
+        carrier_scac=carrier_scac,
+        run_id=run_id,
+        min_variance=min_variance,
+    )
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
@@ -104,6 +130,106 @@ def list_exceptions(
         total=total,
         limit=page.limit,
         offset=page.offset,
+    )
+
+
+DISPUTE_COLUMNS = (
+    "carrier_scac",
+    "invoice_number",
+    "invoice_date",
+    "shipment_reference",
+    "rule_code",
+    "rule_name",
+    "severity",
+    "status",
+    "charge_code",
+    "currency",
+    "billed_amount",
+    "expected_amount",
+    "variance_amount",
+    "finding",
+    "requested_action",
+)
+
+
+def _dispute_rows(db: Session, stmt: Select) -> Iterator[str]:
+    """Stream the packet so a large recovery claim never buffers in memory."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    def flush() -> str:
+        buffer.seek(0)
+        chunk = buffer.read()
+        buffer.seek(0)
+        buffer.truncate(0)
+        return chunk
+
+    writer.writerow(DISPUTE_COLUMNS)
+    yield flush()
+
+    rows = db.scalars(
+        stmt.options(selectinload(AuditException.invoice))
+        .order_by(AuditException.variance_amount.desc(), AuditException.id)
+        .execution_options(yield_per=200)
+    )
+    for exception in rows:
+        invoice = exception.invoice
+        writer.writerow(
+            [
+                exception.carrier_scac or "",
+                exception.invoice_number or "",
+                invoice.invoice_date.isoformat() if invoice else "",
+                exception.shipment_reference or "",
+                exception.rule_code,
+                exception.rule_name,
+                exception.severity,
+                exception.status,
+                exception.charge_code,
+                exception.currency,
+                f"{exception.billed_amount:.2f}",
+                f"{exception.expected_amount:.2f}",
+                f"{exception.variance_amount:.2f}",
+                exception.message,
+                exception.recommendation or "",
+            ]
+        )
+        yield flush()
+
+
+@router.get(
+    "/exceptions.csv",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"text/csv": {}}, "description": "One row per finding."}},
+)
+def export_exceptions(
+    db: DbSession,
+    rule_code: str | None = None,
+    severity: str | None = None,
+    exception_status: str | None = Query(None, alias="status"),
+    carrier_scac: str | None = None,
+    run_id: int | None = None,
+    min_variance: float | None = None,
+) -> StreamingResponse:
+    """The dispute packet: every finding as a row, worst dollars first.
+
+    A recovery claim goes to the carrier as a spreadsheet, so the same filters
+    the exception list takes produce the file — ``?carrier_scac=XPOL`` is one
+    carrier's claim, ``?status=open`` is everything still outstanding.
+    """
+    stmt = _filtered_exceptions(
+        rule_code=rule_code,
+        severity=severity,
+        exception_status=exception_status,
+        carrier_scac=carrier_scac,
+        run_id=run_id,
+        min_variance=min_variance,
+    )
+    scope = (carrier_scac or "all-carriers").lower()
+    filename = f"freightlens-disputes-{scope}-{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        _dispute_rows(db, stmt),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

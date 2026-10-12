@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from decimal import Decimal
 
 from app.models import AuditException
@@ -259,6 +261,53 @@ def test_exception_filters(seeded_client):
         f"{V1}/audits/exceptions", params={"min_variance": 100}
     ).json()
     assert all(Decimal(exc["variance_amount"]) >= 100 for exc in big["items"])
+
+
+def test_the_dispute_packet_exports_every_finding_as_csv(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    response = seeded_client.get(f"{V1}/audits/exceptions.csv")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment; filename=" in response.headers["content-disposition"]
+
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    listed = seeded_client.get(f"{V1}/audits/exceptions", params={"limit": 500}).json()
+    assert len(rows) == listed["total"]
+    assert rows[0]["rule_code"] == listed["items"][0]["rule_code"]
+
+    # Worst dollars first, and money is written as plain two-decimal strings a
+    # spreadsheet will not reinterpret.
+    variances = [Decimal(row["variance_amount"]) for row in rows]
+    assert variances == sorted(variances, reverse=True)
+    assert all(row["variance_amount"].count(".") == 1 for row in rows)
+    assert all(len(row["variance_amount"].split(".")[1]) == 2 for row in rows)
+
+
+def test_the_dispute_packet_takes_the_same_filters_as_the_list(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    response = seeded_client.get(
+        f"{V1}/audits/exceptions.csv", params={"carrier_scac": "xpol"}
+    )
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+
+    assert rows, "XPO has findings in the sample data"
+    assert {row["carrier_scac"] for row in rows} == {"XPOL"}
+    assert "xpol" in response.headers["content-disposition"]
+
+    # Every row carries what a carrier needs to act on the claim.
+    claim = next(row for row in rows if row["rule_code"] == "RATE_MISMATCH")
+    assert claim["invoice_number"] and claim["invoice_date"]
+    assert claim["shipment_reference"] == "SHP-10003"
+    assert Decimal(claim["billed_amount"]) - Decimal(claim["expected_amount"]) == (
+        Decimal(claim["variance_amount"])
+    )
+    assert "contracted" in claim["finding"]
+    assert claim["requested_action"].startswith("Dispute")
+
+
+def test_the_dispute_packet_is_empty_before_an_audit_runs(seeded_client):
+    rows = list(csv.DictReader(io.StringIO(seeded_client.get(f"{V1}/audits/exceptions.csv").text)))
+    assert rows == []
 
 
 def test_an_exception_can_be_worked_to_recovered(seeded_client, seeded_db):
