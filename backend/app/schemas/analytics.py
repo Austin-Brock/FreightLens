@@ -1,4 +1,4 @@
-"""Analytics response models — one summary, enough for the dashboard."""
+"""Analytics response models."""
 
 from __future__ import annotations
 
@@ -39,4 +39,26 @@ class KpiSummary(BaseModel):
 
     by_rule: list[RuleBreakdown] = Field(
         default_factory=list, description="Variance by audit rule, largest first."
+    )
+
+
+class CarrierScorecard(BaseModel):
+    """How one carrier is performing on price, accuracy and service."""
+
+    carrier_scac: str
+    carrier_name: str | None = None
+
+    shipments: int
+    invoices: int
+    total_billed: Decimal
+    exceptions: int
+    total_variance: Decimal = Field(description="Overcharge found across monetary rules.")
+    recoverable_amount: Decimal = Field(description="Open and disputed overcharges.")
+
+    variance_rate: Decimal = Field(
+        description="Variance / billed — the carrier's error rate in dollars."
+    )
+    on_time_rate: Decimal | None = Field(
+        default=None,
+        description="Deliveries that met the promised date, over those with both dates on file.",
     )

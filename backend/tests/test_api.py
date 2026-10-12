@@ -339,6 +339,62 @@ def test_recovering_an_exception_moves_money_from_recoverable_to_recovered(
     assert after["exceptions_detected"] == before["exceptions_detected"]
 
 
+def test_carrier_scorecards_reconcile_with_the_summary(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    summary = seeded_client.get(f"{V1}/analytics/summary").json()
+    cards = seeded_client.get(f"{V1}/analytics/carriers").json()
+
+    # Every dollar and every exception belongs to exactly one carrier.
+    assert sum(Decimal(card["total_billed"]) for card in cards) == Decimal(
+        summary["total_billed"]
+    )
+    assert sum(Decimal(card["total_variance"]) for card in cards) == Decimal(
+        summary["total_variance"]
+    )
+    assert sum(card["invoices"] for card in cards) == summary["invoices_audited"]
+    assert sum(card["shipments"] for card in cards) == summary["shipments"]
+    assert sum(card["exceptions"] for card in cards) == summary["exceptions_detected"]
+
+    # Worst dollars first, so an analyst starts where the money is.
+    variances = [Decimal(card["total_variance"]) for card in cards]
+    assert variances == sorted(variances, reverse=True)
+    assert cards[0]["carrier_scac"] == "XPOL"
+
+
+def test_a_carrier_scorecard_scores_price_and_service_separately(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    cards = {
+        card["carrier_scac"]: card
+        for card in seeded_client.get(f"{V1}/analytics/carriers").json()
+    }
+
+    xpo = cards["XPOL"]
+    assert xpo["carrier_name"] == "XPO Logistics"
+    assert Decimal(xpo["variance_rate"]) == (
+        Decimal(xpo["total_variance"]) / Decimal(xpo["total_billed"])
+    ).quantize(Decimal("0.0001"))
+    # Four of five XPO deliveries met the promised date.
+    assert Decimal(xpo["on_time_rate"]) == Decimal("0.8000")
+
+    # A carrier that billed cleanly still gets a card, with zeroes.
+    assert cards["UPSN"]["exceptions"] == 0
+    assert Decimal(cards["UPSN"]["total_variance"]) == 0
+    assert Decimal(cards["UPSN"]["on_time_rate"]) == 1
+
+
+def test_carrier_scorecards_respect_the_date_window(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    august = seeded_client.get(
+        f"{V1}/analytics/carriers", params={"start": "2026-08-01", "end": "2026-08-31"}
+    ).json()
+    everything = seeded_client.get(f"{V1}/analytics/carriers").json()
+
+    assert sum(card["invoices"] for card in august) == 12
+    assert sum(card["invoices"] for card in august) < sum(
+        card["invoices"] for card in everything
+    )
+
+
 def test_analytics_respects_a_date_window(seeded_client):
     august = seeded_client.get(
         f"{V1}/analytics/summary",
