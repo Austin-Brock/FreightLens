@@ -1,6 +1,11 @@
 """Pydantic request/response schemas."""
 
-from app.schemas.analytics import CarrierScorecard, KpiSummary, RuleBreakdown
+from app.schemas.analytics import (
+    CarrierScorecard,
+    KpiSummary,
+    LaneBreakdown,
+    RuleBreakdown,
+)
 from app.schemas.audit import (
     AuditExceptionRead,
     AuditExceptionUpdate,
@@ -40,6 +45,7 @@ __all__ = [
     "InvoiceLineItemRead",
     "InvoiceStatusUpdate",
     "KpiSummary",
+    "LaneBreakdown",
     "ORMModel",
     "Page",
     "RuleBreakdown",

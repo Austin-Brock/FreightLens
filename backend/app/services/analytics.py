@@ -9,7 +9,12 @@ from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import AuditException, CarrierInvoice, ExceptionStatus, Shipment
-from app.schemas.analytics import CarrierScorecard, KpiSummary, RuleBreakdown
+from app.schemas.analytics import (
+    CarrierScorecard,
+    KpiSummary,
+    LaneBreakdown,
+    RuleBreakdown,
+)
 from app.services.audit_engine import money
 from app.services.rules import MONETARY_RULES, RULES
 
@@ -261,4 +266,108 @@ def carrier_scorecards(
     return cards
 
 
-__all__ = ["carrier_scorecards", "kpi_summary", "variance_by_rule"]
+def lane_breakdown(
+    db: Session,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    limit: int = 20,
+) -> list[LaneBreakdown]:
+    """Spend and billing accuracy per lane and mode, biggest spend first.
+
+    This is a shipment-centric view, so it windows on ``ship_date`` and only
+    counts invoices that matched a shipment — an unmatched invoice has no lane
+    to attribute, which is what MISSING_SHIPMENT exists to surface.
+    """
+    lane_key = (Shipment.origin_state, Shipment.dest_state, Shipment.mode)
+
+    spend = db.execute(
+        _apply_window(
+            select(
+                *lane_key,
+                func.count(func.distinct(Shipment.id)),
+                func.count(CarrierInvoice.id),
+                func.coalesce(func.sum(CarrierInvoice.total_amount), 0),
+            )
+            .join(CarrierInvoice, CarrierInvoice.shipment_id == Shipment.id)
+            .group_by(*lane_key),
+            Shipment.ship_date,
+            start,
+            end,
+        )
+    ).all()
+
+    # Weight is summed off the shipments alone: joining invoices first would
+    # multiply a shipment's weight by the number of invoices billed against it,
+    # which is exactly what a duplicate invoice does.
+    weights = {
+        (origin, dest, str(mode)): _dec(weight)
+        for origin, dest, mode, weight in db.execute(
+            _apply_window(
+                select(
+                    *lane_key,
+                    func.coalesce(
+                        func.sum(
+                            func.coalesce(Shipment.billable_weight_lb, Shipment.weight_lb)
+                        ),
+                        0,
+                    ),
+                ).group_by(*lane_key),
+                Shipment.ship_date,
+                start,
+                end,
+            )
+        ).all()
+    }
+
+    exceptions: dict[tuple[str, str, str], tuple[int, Decimal]] = {}
+    for origin, dest, mode, rule_code, count, variance in db.execute(
+        _apply_window(
+            select(
+                *lane_key,
+                AuditException.rule_code,
+                func.count(AuditException.id),
+                func.coalesce(func.sum(AuditException.variance_amount), 0),
+            )
+            .join(AuditException, AuditException.shipment_id == Shipment.id)
+            .group_by(*lane_key, AuditException.rule_code),
+            Shipment.ship_date,
+            start,
+            end,
+        )
+    ).all():
+        key = (origin, dest, str(mode))
+        found, total = exceptions.get(key, (0, ZERO))
+        found += count
+        if rule_code in MONETARY_RULES:
+            total += _dec(variance)
+        exceptions[key] = (found, total)
+
+    rows = []
+    for origin, dest, mode, shipments, invoices, billed in spend:
+        key = (origin, dest, str(mode))
+        billed = _dec(billed)
+        weight = weights.get(key, ZERO)
+        found, variance = exceptions.get(key, (0, ZERO))
+        rows.append(
+            LaneBreakdown(
+                origin_state=origin,
+                dest_state=dest,
+                mode=mode,
+                shipments=shipments,
+                invoices=invoices,
+                total_weight_lb=money(weight),
+                total_billed=money(billed),
+                exceptions=found,
+                total_variance=money(variance),
+                avg_cost_per_shipment=money(billed / shipments) if shipments else ZERO,
+                cost_per_cwt=(
+                    money(billed / (weight / Decimal("100"))) if weight > ZERO else None
+                ),
+            )
+        )
+    rows.sort(key=lambda row: row.total_billed, reverse=True)
+    return rows[:limit]
+
+
+__all__ = ["carrier_scorecards", "kpi_summary", "lane_breakdown", "variance_by_rule"]

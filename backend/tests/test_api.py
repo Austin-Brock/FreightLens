@@ -395,6 +395,63 @@ def test_carrier_scorecards_respect_the_date_window(seeded_client):
     )
 
 
+def test_lane_spend_accounts_for_every_matched_invoice(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    summary = seeded_client.get(f"{V1}/analytics/summary").json()
+    lanes = seeded_client.get(f"{V1}/analytics/lanes", params={"limit": 200}).json()
+    unmatched = seeded_client.get(
+        f"{V1}/invoices", params={"unmatched_only": True}
+    ).json()
+
+    # A lane comes from the shipment, so an unmatched invoice has none — those
+    # dollars are the only ones missing from this view.
+    orphaned = sum(Decimal(inv["total_amount"]) for inv in unmatched["items"])
+    assert sum(Decimal(lane["total_billed"]) for lane in lanes) + orphaned == Decimal(
+        summary["total_billed"]
+    )
+    assert sum(lane["invoices"] for lane in lanes) + unmatched["total"] == (
+        summary["invoices_audited"]
+    )
+
+    billed = [Decimal(lane["total_billed"]) for lane in lanes]
+    assert billed == sorted(billed, reverse=True)
+
+
+def test_cost_per_cwt_is_priced_off_shipment_weight(seeded_client):
+    seeded_client.post(f"{V1}/audits/run")
+    lanes = {
+        (lane["origin_state"], lane["dest_state"]): lane
+        for lane in seeded_client.get(
+            f"{V1}/analytics/lanes", params={"limit": 200}
+        ).json()
+    }
+
+    ca_tx = lanes[("CA", "TX")]
+    assert ca_tx["mode"] == "ltl"
+    assert Decimal(ca_tx["cost_per_cwt"]) == (
+        Decimal(ca_tx["total_billed"]) / (Decimal(ca_tx["total_weight_lb"]) / 100)
+    ).quantize(Decimal("0.01"))
+
+    # CO->NM carries one shipment billed twice. The duplicate must not
+    # multiply the lane's weight, or cost per cwt halves and looks like a win.
+    co_nm = lanes[("CO", "NM")]
+    assert (co_nm["shipments"], co_nm["invoices"]) == (1, 2)
+    assert Decimal(co_nm["total_weight_lb"]) == Decimal("1250.00")
+
+
+def test_lane_limit_returns_the_biggest_spend_first(seeded_client):
+    top = seeded_client.get(f"{V1}/analytics/lanes", params={"limit": 3}).json()
+    everything = seeded_client.get(
+        f"{V1}/analytics/lanes", params={"limit": 200}
+    ).json()
+
+    assert len(top) == 3
+    assert len(everything) > 3
+    assert [lane["origin_state"] for lane in top] == [
+        lane["origin_state"] for lane in everything[:3]
+    ]
+
+
 def test_analytics_respects_a_date_window(seeded_client):
     august = seeded_client.get(
         f"{V1}/analytics/summary",

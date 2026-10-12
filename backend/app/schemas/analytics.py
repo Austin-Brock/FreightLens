@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import ExceptionSeverity
+from app.models.enums import ExceptionSeverity, TransportMode
 
 
 class RuleBreakdown(BaseModel):
@@ -62,3 +62,31 @@ class CarrierScorecard(BaseModel):
         default=None,
         description="Deliveries that met the promised date, over those with both dates on file.",
     )
+
+
+class LaneBreakdown(BaseModel):
+    """What one origin/destination pair costs, and how clean its billing is.
+
+    Lanes are the unit freight is negotiated in, so this is the view that feeds
+    a bid: cost per hundredweight is what a carrier's rate sheet is quoted in.
+    """
+
+    origin_state: str
+    dest_state: str
+    mode: TransportMode
+
+    shipments: int
+    invoices: int
+    total_weight_lb: Decimal
+    total_billed: Decimal
+    exceptions: int
+    total_variance: Decimal
+
+    avg_cost_per_shipment: Decimal
+    cost_per_cwt: Decimal | None = Field(
+        default=None, description="Billed dollars per 100 lb — how carriers quote LTL."
+    )
+
+    @property
+    def lane(self) -> str:
+        return f"{self.origin_state}->{self.dest_state}"

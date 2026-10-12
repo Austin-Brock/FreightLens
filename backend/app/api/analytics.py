@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.deps import DbSession
-from app.schemas import CarrierScorecard, KpiSummary
+from app.schemas import CarrierScorecard, KpiSummary, LaneBreakdown
 from app.services import analytics
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -25,3 +25,14 @@ def carriers(
 ) -> list[CarrierScorecard]:
     """Per-carrier spend, billing accuracy and on-time rate, worst dollars first."""
     return analytics.carrier_scorecards(db, start=start, end=end)
+
+
+@router.get("/lanes", response_model=list[LaneBreakdown])
+def lanes(
+    db: DbSession,
+    start: date | None = None,
+    end: date | None = None,
+    limit: int = Query(20, ge=1, le=200, description="How many lanes to return."),
+) -> list[LaneBreakdown]:
+    """Spend, cost per hundredweight and variance per lane, biggest spend first."""
+    return analytics.lane_breakdown(db, start=start, end=end, limit=limit)
