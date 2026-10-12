@@ -106,12 +106,28 @@ excluded from recoverable totals.
 ## Request flow
 
 ```
-GET  /                            → frontend/index.html
-GET  /api/v1/analytics/summary    → KPI tiles + per-rule breakdown  (1 call)
-GET  /api/v1/audits/exceptions    → the exceptions table
-POST /api/v1/audits/run           → re-audit, then the page reloads
-GET  /api/v1/invoices/{id}/audit  → the drill-down: shipment + invoice + findings
+GET  /                              → frontend/index.html
+GET  /api/v1/analytics/summary      → KPI tiles + per-rule breakdown  (1 call)
+GET  /api/v1/analytics/carriers     → the carrier performance table
+GET  /api/v1/audits/exceptions      → the exceptions table
+POST /api/v1/audits/run             → re-audit, then the page reloads
+GET  /api/v1/invoices/{id}/audit    → the drill-down: shipment + invoice + findings
+GET  /api/v1/audits/exceptions.csv  → the export link in the header
 ```
+
+`/analytics/carriers` and `/analytics/lanes` each run a few narrow aggregates
+and merge them in Python rather than one wide join, because the invoice window
+keys off `invoice_date` while the shipment window keys off `ship_date` — a
+join across both either drops carriers or double-counts their spend.
+
+## Schema migrations
+
+`backend/migrations/` holds the Alembic chain; revision 0001 is the whole
+schema. Local startup still uses `create_all` for speed and then stamps the
+database at head, so `alembic upgrade head` is a no-op on a dev database
+instead of failing against tables that already exist. A test runs
+`compare_metadata` against the migrated schema, so a model change without a
+revision fails CI.
 
 The dashboard is one static HTML file with vanilla JS, served by FastAPI itself.
 No build step, no `node_modules`, no second port — `uvicorn app.main:app` and
