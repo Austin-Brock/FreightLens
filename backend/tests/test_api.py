@@ -173,6 +173,20 @@ def test_quote_prices_a_lane_from_the_contract(seeded_client):
     assert body["rate"]["contract_id"] == "XPO-2026-07-LANE"
 
 
+def test_quote_without_a_distance_on_a_per_mile_lane_is_422(seeded_client):
+    """The rate exists; the request just cannot drive it."""
+    response = seeded_client.get(
+        f"{V1}/rates/quote",
+        params={
+            "carrier_scac": "CHRW", "mode": "ftl", "origin_state": "CA",
+            "dest_state": "IL", "weight_lb": "30000", "service_level": "standard",
+            "ship_date": "2026-08-11",
+        },
+    )
+    assert response.status_code == 422
+    assert "distance" in response.json()["detail"]
+
+
 def test_quote_without_a_contract_is_404(seeded_client):
     response = seeded_client.get(
         f"{V1}/rates/quote",

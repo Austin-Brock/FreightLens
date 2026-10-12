@@ -12,6 +12,7 @@ from app.schemas.audit import AuditRunRequest
 from app.services.audit_engine import (
     AuditEngine,
     RateBook,
+    UnpriceableCharge,
     expected_charge,
     money,
     run_audit,
@@ -65,9 +66,54 @@ def test_each_rate_type_prices_from_its_own_driver(rate_type, base, kwargs, expe
     assert expected_charge(rate, **kwargs) == Decimal(expected)
 
 
-def test_per_mile_without_a_distance_falls_back_to_the_minimum_charge():
-    rate = make_rate(rate_type=RateType.PER_MILE, base_rate=Decimal("2.45"), min_charge=Decimal("650.00"))
-    assert expected_charge(rate, distance_mi=None) == Decimal("650.00")
+def test_a_rate_whose_driver_is_missing_is_unpriceable():
+    """A minimum charge is a floor on a priced move, not a price for an unpriced one."""
+    per_mile = make_rate(
+        rate_type=RateType.PER_MILE, base_rate=Decimal("2.45"), min_charge=Decimal("650.00")
+    )
+    with pytest.raises(UnpriceableCharge, match="no distance"):
+        expected_charge(per_mile, distance_mi=None)
+
+    per_cwt = make_rate(base_rate=Decimal("30.00"), min_charge=Decimal("95.00"))
+    with pytest.raises(UnpriceableCharge, match="no weight"):
+        expected_charge(per_cwt, weight_lb=Decimal("0"))
+
+
+def test_a_shipment_with_no_distance_is_not_claimed_against_a_per_mile_rate(db):
+    """Regression: the minimum charge used to become the "expected" linehaul.
+
+    A 1,150-mile truckload at $2.45/mi is $2,817.50, but with the distance
+    missing from the shipment feed the rate priced at its $650 minimum and the
+    audit claimed the $2,167.50 difference from a carrier that billed
+    correctly.
+    """
+    rate = make_rate(
+        mode=TransportMode.FTL,
+        rate_type=RateType.PER_MILE,
+        base_rate=Decimal("2.45"),
+        min_charge=Decimal("650.00"),
+    )
+    shipment = make_shipment(db, mode=TransportMode.FTL, distance_mi=None)
+    invoice = make_invoice(db, shipment=shipment, lines=[("FREIGHT", "2817.50")])
+
+    findings = engine(rate).audit_invoice(invoice)
+    assert codes(findings) == []
+
+
+def test_a_distance_still_audits_normally(db):
+    """The same lane, with the distance present, is audited as before."""
+    rate = make_rate(
+        mode=TransportMode.FTL,
+        rate_type=RateType.PER_MILE,
+        base_rate=Decimal("2.45"),
+        min_charge=Decimal("650.00"),
+    )
+    shipment = make_shipment(db, mode=TransportMode.FTL, distance_mi=Decimal("1150"))
+    invoice = make_invoice(db, shipment=shipment, lines=[("FREIGHT", "3200.00")])
+
+    finding = only(engine(rate).audit_invoice(invoice), "RATE_MISMATCH")
+    assert finding.expected_amount == Decimal("2817.50")
+    assert finding.variance_amount == Decimal("382.50")
 
 
 # ---------------------------------------------------------------------------

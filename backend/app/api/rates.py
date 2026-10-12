@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from app.api.deps import DbSession, PageParams
 from app.models import ContractedRate
 from app.schemas import ContractedRateCreate, ContractedRateRead, Page
-from app.services.audit_engine import RateBook, expected_charge
+from app.services.audit_engine import RateBook, UnpriceableCharge, expected_charge
 
 router = APIRouter(prefix="/rates", tags=["rates"])
 
@@ -89,9 +89,14 @@ def quote(
             f"No effective {charge_code} rate for {carrier_scac.upper()} "
             f"{origin_state.upper()}->{dest_state.upper()} at {weight_lb} lb",
         )
+    try:
+        expected_amount = expected_charge(
+            rate_row, weight_lb=weight_lb, distance_mi=distance_mi
+        )
+    except UnpriceableCharge as exc:
+        # The rate exists, the request just cannot drive it — a 422, not a 404.
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return {
         "rate": ContractedRateRead.model_validate(rate_row),
-        "expected_amount": expected_charge(
-            rate_row, weight_lb=weight_lb, distance_mi=distance_mi
-        ),
+        "expected_amount": expected_amount,
     }

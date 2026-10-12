@@ -13,6 +13,7 @@ more than the contract allows, i.e. dollars the shipper can recover.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -40,6 +41,8 @@ from app.models import (
 )
 from app.schemas.audit import AuditRunRequest
 from app.services.rules import RULES, RuleSpec, rule
+
+logger = logging.getLogger(__name__)
 
 CENTS = Decimal("0.01")
 ZERO = Decimal("0")
@@ -153,6 +156,16 @@ def _matches(contract_value: str | None, shipment_value: str | None) -> bool:
     return contract_value.upper() == shipment_value.upper()
 
 
+class UnpriceableCharge(ValueError):
+    """A contract row cannot be priced because the shipment lacks its driver.
+
+    A per-mile rate needs a distance and a weight-based rate needs a weight.
+    Without one the row prices at zero, the minimum charge takes over, and the
+    audit would claim the whole difference as an overcharge — a finding that
+    says more about the shipment feed than about the carrier.
+    """
+
+
 def expected_charge(
     rate_row: ContractedRate,
     *,
@@ -163,14 +176,25 @@ def expected_charge(
     """Price one charge from a contract row.
 
     ``basis`` is the linehaul a percentage-type charge (fuel) applies to.
+
+    Raises :class:`UnpriceableCharge` when the rate's driver is missing.
     """
     base = Decimal(rate_row.base_rate)
-    if rate_row.rate_type == RateType.PER_CWT:
-        gross = base * (Decimal(weight_lb) / Decimal("100"))
-    elif rate_row.rate_type == RateType.PER_LB:
-        gross = base * Decimal(weight_lb)
+    if rate_row.rate_type in (RateType.PER_CWT, RateType.PER_LB):
+        if Decimal(weight_lb or 0) <= ZERO:
+            raise UnpriceableCharge(
+                f"{rate_row.charge_code} is rated {rate_row.rate_type} but the "
+                "shipment has no weight"
+            )
+        per_unit = Decimal("100") if rate_row.rate_type == RateType.PER_CWT else Decimal("1")
+        gross = base * (Decimal(weight_lb) / per_unit)
     elif rate_row.rate_type == RateType.PER_MILE:
-        gross = base * Decimal(distance_mi or 0)
+        if distance_mi is None or Decimal(distance_mi) <= ZERO:
+            raise UnpriceableCharge(
+                f"{rate_row.charge_code} is rated per mile but the shipment has "
+                "no distance"
+            )
+        gross = base * Decimal(distance_mi)
     elif rate_row.rate_type == RateType.PCT_OF_LINEHAUL:
         gross = base * Decimal(basis)
     else:  # FLAT — a fixed charge per shipment
@@ -311,19 +335,27 @@ class AuditEngine:
         )
         billed_linehaul = money(invoice.amount_for(ChargeCode.FREIGHT.value))
 
-        if linehaul_rate is None:
-            # Nothing to price against, so the linehaul is taken at face value
-            # and fuel is measured against what was actually billed.
-            expected_linehaul = billed_linehaul
-        else:
-            expected_linehaul = expected_charge(
-                linehaul_rate,
-                weight_lb=shipment.rated_weight_lb,
-                distance_mi=shipment.distance_mi,
-            )
-            findings.extend(
-                self._check_linehaul(shipment, linehaul_rate, billed_linehaul, expected_linehaul)
-            )
+        # Nothing to price against — or nothing to price *with* — so the
+        # linehaul is taken at face value and fuel is measured against what was
+        # actually billed.
+        expected_linehaul = billed_linehaul
+        if linehaul_rate is not None:
+            try:
+                expected_linehaul = expected_charge(
+                    linehaul_rate,
+                    weight_lb=shipment.rated_weight_lb,
+                    distance_mi=shipment.distance_mi,
+                )
+            except UnpriceableCharge as exc:
+                logger.warning(
+                    "Skipping linehaul audit of %s: %s", invoice_key(invoice), exc
+                )
+            else:
+                findings.extend(
+                    self._check_linehaul(
+                        shipment, linehaul_rate, billed_linehaul, expected_linehaul
+                    )
+                )
 
         findings.extend(self._check_fuel(invoice, shipment, linehaul_rate, expected_linehaul))
         findings.extend(self._check_accessorials(invoice, shipment))
@@ -411,7 +443,11 @@ class AuditEngine:
             when=shipment.ship_date,
         )
         if fuel_rate is not None:
-            expected_fuel = expected_charge(fuel_rate, basis=expected_linehaul)
+            try:
+                expected_fuel = expected_charge(fuel_rate, basis=expected_linehaul)
+            except UnpriceableCharge as exc:
+                logger.warning("Skipping fuel audit of %s: %s", invoice_key(invoice), exc)
+                return []
             pct_label = f"{Decimal(fuel_rate.base_rate) * 100:.2f}% of linehaul"
         elif linehaul_rate is not None and Decimal(linehaul_rate.fuel_surcharge_pct) > ZERO:
             pct = Decimal(linehaul_rate.fuel_surcharge_pct)
