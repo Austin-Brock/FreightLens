@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  test:
+    name: lint & test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest
+
+      # The dashboard is only honest if a cold start really does produce the
+      # numbers the README advertises, so boot the app the way a new clone does.
+      - name: Smoke-test a cold start
+        run: |
+          python -c "
+          from fastapi.testclient import TestClient
+          from app.main import app
+
+          with TestClient(app) as client:
+              summary = client.get('/api/v1/analytics/summary').json()
+              assert client.get('/health').json()['status'] == 'ok'
+              assert summary['invoices_audited'] == 27, summary
+              assert summary['exceptions_detected'] > 0, summary
+              print('cold start OK:', summary['invoices_audited'], 'invoices,',
+                    summary['exceptions_detected'], 'exceptions,',
+                    summary['recoverable_amount'], 'recoverable')
+          "
