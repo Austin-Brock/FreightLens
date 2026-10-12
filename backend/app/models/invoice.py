@@ -36,11 +36,11 @@ class CarrierInvoice(TimestampMixin, Base):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
     status: Mapped[InvoiceStatus] = mapped_column(String(16), default=InvoiceStatus.RECEIVED)
 
-    shipment: Mapped["Shipment | None"] = relationship(back_populates="invoices")  # noqa: F821
-    line_items: Mapped[list["InvoiceLineItem"]] = relationship(
+    shipment: Mapped[Shipment | None] = relationship(back_populates="invoices")  # noqa: F821
+    line_items: Mapped[list[InvoiceLineItem]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan", lazy="selectin"
     )
-    exceptions: Mapped[list["AuditException"]] = relationship(  # noqa: F821
+    exceptions: Mapped[list[AuditException]] = relationship(  # noqa: F821
         back_populates="invoice", cascade="all, delete-orphan"
     )
 
@@ -48,14 +48,14 @@ class CarrierInvoice(TimestampMixin, Base):
     def line_total(self) -> Decimal:
         return sum((line.amount for line in self.line_items), Decimal("0"))
 
-    def lines_for(self, charge_code: str) -> list["InvoiceLineItem"]:
+    def lines_for(self, charge_code: str) -> list[InvoiceLineItem]:
         return [line for line in self.line_items if line.charge_code == charge_code]
 
     def amount_for(self, charge_code: str) -> Decimal:
         return sum((line.amount for line in self.lines_for(charge_code)), Decimal("0"))
 
     @property
-    def accessorial_lines(self) -> list["InvoiceLineItem"]:
+    def accessorial_lines(self) -> list[InvoiceLineItem]:
         return [line for line in self.line_items if line.charge_code in ACCESSORIAL_CODES]
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

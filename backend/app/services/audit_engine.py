@@ -13,10 +13,10 @@ more than the contract allows, i.e. dollars the shipper can recover.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Iterable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -25,6 +25,7 @@ from app.config import settings
 from app.db.base import utcnow
 from app.models import (
     ACCESSORIAL_CODES,
+    WILDCARD,
     AuditException,
     AuditRun,
     AuditRunStatus,
@@ -36,7 +37,6 @@ from app.models import (
     RateType,
     Shipment,
     TransportMode,
-    WILDCARD,
 )
 from app.schemas.audit import AuditRunRequest
 from app.services.rules import RULES, RuleSpec, rule
@@ -103,7 +103,7 @@ class RateBook:
             self._by_key.setdefault(key, []).append(rate_row)
 
     @classmethod
-    def from_db(cls, db: Session, carrier_scac: str | None = None) -> "RateBook":
+    def from_db(cls, db: Session, carrier_scac: str | None = None) -> RateBook:
         stmt = select(ContractedRate)
         if carrier_scac:
             stmt = stmt.where(ContractedRate.carrier_scac == carrier_scac.upper())
@@ -200,7 +200,7 @@ class _DuplicateIndex:
     exact: dict[tuple, list[CarrierInvoice]] = field(default_factory=dict)
 
     @classmethod
-    def build(cls, invoices: Sequence[CarrierInvoice]) -> "_DuplicateIndex":
+    def build(cls, invoices: Sequence[CarrierInvoice]) -> _DuplicateIndex:
         index = cls()
         for invoice in sorted(invoices, key=_invoice_order):
             if not invoice.shipment_ref:
@@ -609,9 +609,9 @@ def run_audit(db: Session, request: AuditRunRequest | None = None) -> AuditRun:
 
 
 __all__ = [
+    "RULES",
     "AuditEngine",
     "AuditFinding",
-    "RULES",
     "RateBook",
     "expected_charge",
     "invoice_key",

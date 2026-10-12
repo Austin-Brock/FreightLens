@@ -82,21 +82,21 @@ def seeded_client(client: TestClient, seeded_db: Session) -> TestClient:
 
 
 def make_shipment(db: Session | None = None, **overrides) -> Shipment:
-    defaults = dict(
-        shipment_id="SHP-1",
-        carrier_scac="ODFL",
-        mode=TransportMode.LTL,
-        service_level="standard",
-        origin_state="CA",
-        origin_zip="90021",
-        dest_state="TX",
-        dest_zip="75201",
-        ship_date=date(2026, 3, 2),
-        promised_date=date(2026, 3, 6),
-        delivery_date=date(2026, 3, 5),
-        weight_lb=Decimal("1000"),
-        pieces=2,
-    )
+    defaults = {
+        "shipment_id": "SHP-1",
+        "carrier_scac": "ODFL",
+        "mode": TransportMode.LTL,
+        "service_level": "standard",
+        "origin_state": "CA",
+        "origin_zip": "90021",
+        "dest_state": "TX",
+        "dest_zip": "75201",
+        "ship_date": date(2026, 3, 2),
+        "promised_date": date(2026, 3, 6),
+        "delivery_date": date(2026, 3, 5),
+        "weight_lb": Decimal("1000"),
+        "pieces": 2,
+    }
     shipment = Shipment(**{**defaults, **overrides})
     if db is not None:
         db.add(shipment)
@@ -105,22 +105,22 @@ def make_shipment(db: Session | None = None, **overrides) -> Shipment:
 
 
 def make_rate(db: Session | None = None, **overrides) -> ContractedRate:
-    defaults = dict(
-        carrier_scac="ODFL",
-        mode=TransportMode.LTL,
-        service_level="*",
-        origin_state="*",
-        dest_state="*",
-        charge_code="FREIGHT",
-        rate_type=RateType.PER_CWT,
-        base_rate=Decimal("30.00"),
-        min_weight_lb=Decimal("0"),
-        max_weight_lb=None,
-        discount_pct=Decimal("0"),
-        fuel_surcharge_pct=Decimal("0"),
-        effective_date=date(2026, 1, 1),
-        expiration_date=date(2026, 12, 31),
-    )
+    defaults = {
+        "carrier_scac": "ODFL",
+        "mode": TransportMode.LTL,
+        "service_level": "*",
+        "origin_state": "*",
+        "dest_state": "*",
+        "charge_code": "FREIGHT",
+        "rate_type": RateType.PER_CWT,
+        "base_rate": Decimal("30.00"),
+        "min_weight_lb": Decimal("0"),
+        "max_weight_lb": None,
+        "discount_pct": Decimal("0"),
+        "fuel_surcharge_pct": Decimal("0"),
+        "effective_date": date(2026, 1, 1),
+        "expiration_date": date(2026, 12, 31),
+    }
     rate = ContractedRate(**{**defaults, **overrides})
     if db is not None:
         db.add(rate)
@@ -137,13 +137,13 @@ def make_invoice(
     **overrides,
 ) -> CarrierInvoice:
     """Build an invoice. ``lines`` is ``[(charge_code, amount), ...]``."""
-    defaults = dict(
-        invoice_number="INV-1",
-        carrier_scac=(shipment.carrier_scac if shipment else "ODFL"),
-        shipment_ref=(shipment.shipment_id if shipment else None),
-        invoice_date=date(2026, 3, 10),
-        currency="USD",
-    )
+    defaults = {
+        "invoice_number": "INV-1",
+        "carrier_scac": (shipment.carrier_scac if shipment else "ODFL"),
+        "shipment_ref": (shipment.shipment_id if shipment else None),
+        "invoice_date": date(2026, 3, 10),
+        "currency": "USD",
+    }
     invoice = CarrierInvoice(**{**defaults, **overrides})
     for index, (charge_code, amount) in enumerate(lines or [], start=1):
         invoice.line_items.append(

@@ -17,6 +17,7 @@ from app.models.shipment import Shipment
 
 __all__ = [
     "ACCESSORIAL_CODES",
+    "WILDCARD",
     "AuditException",
     "AuditRun",
     "AuditRunStatus",
@@ -30,5 +31,4 @@ __all__ = [
     "RateType",
     "Shipment",
     "TransportMode",
-    "WILDCARD",
 ]

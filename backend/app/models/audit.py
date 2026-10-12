@@ -29,7 +29,7 @@ class AuditRun(Base):
     total_variance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
     notes: Mapped[str | None] = mapped_column(Text)
 
-    exceptions: Mapped[list["AuditException"]] = relationship(
+    exceptions: Mapped[list[AuditException]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
 
@@ -52,7 +52,9 @@ class AuditException(TimestampMixin, Base):
 
     __tablename__ = "audit_exceptions"
     __table_args__ = (
-        UniqueConstraint("run_id", "invoice_id", "rule_code", "charge_code", name="uq_exception_key"),
+        UniqueConstraint(
+            "run_id", "invoice_id", "rule_code", "charge_code", name="uq_exception_key"
+        ),
         Index("ix_exceptions_rule_status", "rule_code", "status"),
     )
 
@@ -65,7 +67,9 @@ class AuditException(TimestampMixin, Base):
 
     rule_code: Mapped[str] = mapped_column(String(48), index=True)
     rule_name: Mapped[str] = mapped_column(String(128))
-    severity: Mapped[ExceptionSeverity] = mapped_column(String(16), default=ExceptionSeverity.MEDIUM)
+    severity: Mapped[ExceptionSeverity] = mapped_column(
+        String(16), default=ExceptionSeverity.MEDIUM
+    )
     status: Mapped[ExceptionStatus] = mapped_column(String(16), default=ExceptionStatus.OPEN)
     charge_code: Mapped[str] = mapped_column(String(32), default="")
 
@@ -79,8 +83,8 @@ class AuditException(TimestampMixin, Base):
     resolution_note: Mapped[str | None] = mapped_column(Text)
 
     run: Mapped[AuditRun | None] = relationship(back_populates="exceptions")
-    invoice: Mapped["CarrierInvoice | None"] = relationship(back_populates="exceptions")  # noqa: F821
-    shipment: Mapped["Shipment | None"] = relationship(back_populates="exceptions")  # noqa: F821
+    invoice: Mapped[CarrierInvoice | None] = relationship(back_populates="exceptions")  # noqa: F821
+    shipment: Mapped[Shipment | None] = relationship(back_populates="exceptions")  # noqa: F821
 
     # Denormalised for display: an exception list is always read alongside
     # "which invoice, which carrier", and resolving it here keeps the API

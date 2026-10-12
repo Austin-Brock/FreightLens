@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    WILDCARD,
     CarrierInvoice,
     ChargeCode,
     ContractedRate,
@@ -29,7 +30,6 @@ from app.models import (
     RateType,
     Shipment,
     TransportMode,
-    WILDCARD,
 )
 from app.schemas.ingestion import IngestionError, IngestionResult
 

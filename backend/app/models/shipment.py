@@ -61,10 +61,10 @@ class Shipment(TimestampMixin, Base):
     customer: Mapped[str | None] = mapped_column(String(128))
     cost_center: Mapped[str | None] = mapped_column(String(64))
 
-    invoices: Mapped[list["CarrierInvoice"]] = relationship(  # noqa: F821
+    invoices: Mapped[list[CarrierInvoice]] = relationship(  # noqa: F821
         back_populates="shipment", cascade="all, delete-orphan"
     )
-    exceptions: Mapped[list["AuditException"]] = relationship(  # noqa: F821
+    exceptions: Mapped[list[AuditException]] = relationship(  # noqa: F821
         back_populates="shipment", cascade="all, delete-orphan"
     )
 
@@ -92,4 +92,7 @@ class Shipment(TimestampMixin, Base):
         return self.delivery_date > self.promised_date
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"<Shipment {self.shipment_id} {self.carrier_scac} {self.origin_state}->{self.dest_state}>"
+        return (
+            f"<Shipment {self.shipment_id} {self.carrier_scac} "
+            f"{self.origin_state}->{self.dest_state}>"
+        )

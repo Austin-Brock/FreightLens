@@ -18,6 +18,7 @@ from app.services.audit_engine import (
 )
 from tests.conftest import make_invoice, make_rate, make_shipment
 
+
 def engine(*rates, **kwargs) -> AuditEngine:
     return AuditEngine(RateBook(rates), **kwargs)
 
