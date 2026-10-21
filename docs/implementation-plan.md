@@ -51,7 +51,7 @@ phase parent so Smartsheet rolls up duration automatically.
 | 17 | Stand up environment & load contracted rates | 2d | 15 | Implementation Eng |
 | 18 | Build TMS shipment feed (scheduled extract) | 4d | 15 | Customer IT |
 | 19 | Build invoice intake per carrier | 8d | 15 | Implementation Eng |
-| 20 | Configure 6 audit rules + tolerances | 2d | 17 | CSA |
+| 20 | Configure 7 audit rules + tolerances | 2d | 17 | CSA |
 | 21 | Historical backload — 90 days of invoices | 3d | 18,19 | Implementation Eng |
 | 22 | Baseline audit run & variance review with customer | 2d | 20,21 | CSA |
 | 23 | Tune tolerances from baseline false positives | 2d | 22 | CSA |

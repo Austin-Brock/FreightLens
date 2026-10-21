@@ -129,14 +129,16 @@ instead of failing against tables that already exist. A test runs
 `compare_metadata` against the migrated schema, so a model change without a
 revision fails CI.
 
+## The dashboard
+
 The dashboard is one static HTML file with vanilla JS, served by FastAPI itself.
 No build step, no `node_modules`, no second port — `uvicorn app.main:app` and
 open `localhost:8000`. For a four-tile dashboard that is the right trade.
 
 ## Deliberately not here
 
-SQLite, not Postgres. No Alembic, no Docker, no queues, no auth, no background
-jobs. Schema comes from `Base.metadata.create_all()`. The data model is designed
-so swapping `DATABASE_URL` to Postgres is the only change needed — but adding
-that infrastructure would make the project harder to read without making the
-freight-audit concept any clearer.
+SQLite, not Postgres. No Docker, no queues, no auth, no background jobs.
+The data model and the migration chain are written so swapping `DATABASE_URL`
+to Postgres is the only change needed — but adding that infrastructure would
+make the project harder to read without making the freight-audit concept any
+clearer.

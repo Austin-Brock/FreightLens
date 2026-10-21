@@ -84,7 +84,7 @@ backend/app/
     analytics.py     KPI summary, carrier scorecards, lane breakdown
   db/          engine, session, schema creation, sample-data seed
 backend/migrations/  Alembic chain; revision 0001 is the whole schema
-backend/tests/ 105 tests
+backend/tests/ 108 tests
 frontend/      index.html — the dashboard, one file, no build step
 sample_data/   the three input CSVs
 docs/          architecture.md · glossary.md · implementation-plan.md
